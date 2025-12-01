@@ -8,6 +8,8 @@ An automated attendance tracking system for Discord servers using rotating codes
 - **Slash Commands**: Modern Discord slash commands for easy interaction
 - **SQLite Database**: Reliable local storage with automatic concurrent access handling
 - **CSV Export**: Export attendance records for analysis or record-keeping
+- **Student Registration**: Link Discord accounts to student IDs for gradebook integration
+- **Admin Management**: Manually mark students as present, excused, or remove records
 - **Last Submission Wins**: Students can correct mistakes by resubmitting
 - **Ephemeral Responses**: Student submissions are private (only visible to them)
 - **Channel Restrictions**: Admin commands work only in admin channel, attendance only in designated channel
@@ -21,7 +23,7 @@ An automated attendance tracking system for Discord servers using rotating codes
    /open_attendance
    ```
 
-2. **Bot posts a message** in the attendance channel with a code like "A1B2"
+2. **Bot posts a message** in the admin channel with a code like "A1B2" (display on projector)
 
 3. **Students submit attendance** in the attendance channel:
    ```
@@ -77,15 +79,68 @@ An automated attendance tracking system for Discord servers using rotating codes
 ### Step 2: Get Channel IDs
 
 1. Enable Developer Mode in Discord (Desktop/Web):
-   - Click the User Settings (Gear Icon ⚙️) at the bottom-left near your username.
-   - In the left sidebar, scroll down past "Billing Settings" until you see the section header "APP SETTINGS".
-   - Under "APP SETTINGS", click on "Advanced".
-   - Toggle "Developer Mode" to On.
+   - Click the User Settings (Gear Icon ⚙️) at the bottom-left near your username
+   - In the left sidebar, scroll down past "Billing Settings" until you see "APP SETTINGS"
+   - Under "APP SETTINGS", click on "Advanced"
+   - Toggle "Developer Mode" to On
 
 2. Right-click on your admin channel → "Copy Channel ID"
 3. Right-click on your attendance channel → "Copy Channel ID"
 
 ### Step 3: Install the Bot
+
+#### Option A: Using Docker (Recommended)
+
+1. Clone the repository:
+   ```bash
+   git clone <repository-url>
+   cd discord-attendance
+   ```
+
+2. Create your configuration file:
+   ```bash
+   cp .env.example .env
+   ```
+
+3. Edit `.env` with your Discord credentials:
+   ```env
+   DISCORD_BOT_TOKEN=your_bot_token_here
+   ADMIN_CHANNEL_ID=123456789012345678
+   ATTENDANCE_CHANNEL_ID=987654321098765432
+   ```
+
+4. Start the bot:
+   ```bash
+   docker compose up -d
+   ```
+
+5. View logs:
+   ```bash
+   docker compose logs -f
+   ```
+
+6. Stop the bot:
+   ```bash
+   docker compose down
+   ```
+
+**Docker Commands Reference:**
+
+| Command | Description |
+|---------|-------------|
+| `docker compose up -d` | Start the bot in background |
+| `docker compose down` | Stop the bot |
+| `docker compose logs -f` | View live logs |
+| `docker compose restart` | Restart the bot |
+| `docker compose build` | Rebuild the image (after code changes) |
+| `docker compose pull && docker compose up -d` | Update to latest version |
+
+**Data Persistence:** The database is stored in `data/` which is mounted as a Docker volume. To backup:
+```bash
+cp data/attendance.db data/attendance.db.backup
+```
+
+#### Option B: Using Python Directly
 
 1. Clone or download this repository:
    ```bash
@@ -95,12 +150,12 @@ An automated attendance tracking system for Discord servers using rotating codes
 
 2. Install dependencies:
 
-   **Option A: Using pip (traditional)**
+   **Using pip (traditional):**
    ```bash
    pip install -r requirements.txt
    ```
 
-   **Option B: Using uv (faster, recommended)**
+   **Using uv (faster, recommended):**
    ```bash
    # Install uv if you haven't already
    curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -109,7 +164,7 @@ An automated attendance tracking system for Discord servers using rotating codes
    uv pip install -r requirements.txt
    ```
 
-   > **Note:** [uv](https://github.com/astral-sh/uv) is a fast Python package installer that's 10-100x faster than pip. It's fully compatible with pip and can be used as a drop-in replacement.
+   > **Note:** [uv](https://github.com/astral-sh/uv) is a fast Python package installer that's 10-100x faster than pip.
 
 3. Create your configuration file:
    ```bash
@@ -139,117 +194,72 @@ Logged in as YourBot (ID: ...)
 Bot is ready!
 ```
 
-## Docker Deployment
-
-For easier deployment and management, you can run the bot using Docker.
-
-### Prerequisites
-
-- [Docker](https://docs.docker.com/get-docker/) installed
-- [Docker Compose](https://docs.docker.com/compose/install/) (included with Docker Desktop)
-
-### Quick Start with Docker Compose
-
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   cd discord-attendance
-   ```
-
-2. Create your configuration file:
-   ```bash
-   cp .env.example .env
-   ```
-
-3. Edit `.env` with your Discord credentials (see Step 1 & 2 above for getting these):
-   ```env
-   DISCORD_BOT_TOKEN=your_bot_token_here
-   ADMIN_CHANNEL_ID=123456789012345678
-   ATTENDANCE_CHANNEL_ID=987654321098765432
-   ```
-
-4. Start the bot:
-   ```bash
-   docker compose up -d
-   ```
-
-5. View logs:
-   ```bash
-   docker compose logs -f
-   ```
-
-6. Stop the bot:
-   ```bash
-   docker compose down
-   ```
-
-### Building and Running Manually
-
-If you prefer not to use Docker Compose:
-
-```bash
-# Build the image
-docker build -t discord-attendance-bot .
-
-# Run the container
-docker run -d \
-  --name discord-attendance-bot \
-  --restart unless-stopped \
-  --env-file .env \
-  -v $(pwd)/data:/app/data \
-  discord-attendance-bot
-```
-
-### Docker Commands Reference
-
-| Command | Description |
-|---------|-------------|
-| `docker compose up -d` | Start the bot in background |
-| `docker compose down` | Stop the bot |
-| `docker compose logs -f` | View live logs |
-| `docker compose restart` | Restart the bot |
-| `docker compose build` | Rebuild the image (after code changes) |
-| `docker compose pull && docker compose up -d` | Update to latest version |
-
-### Data Persistence
-
-The SQLite database is stored in the `data/` directory, which is mounted as a Docker volume. Your attendance records persist even when the container is stopped or rebuilt.
-
-To backup your data:
-```bash
-cp data/attendance.db data/attendance.db.backup
-```
-
 ## Commands
-
-### Admin Commands (Admin Channel Only)
-
-- `/open_attendance` - Start a new attendance session
-  - Posts attendance message in attendance channel
-  - Starts code rotation
-
-- `/close_attendance` - End the current attendance session
-  - Saves all records to database
-  - Shows total submission count
-
-- `/export_csv [session_id]` - Export attendance records to CSV
-  - Without `session_id`: exports all records
-  - With `session_id`: exports only that session's records
 
 ### Student Commands
 
-- `/register [student_id] [student_name]` - Register your student information **(Any Channel)**
-  - `student_id`: Your student ID number (required)
-  - `student_name`: Your full name (optional)
-  - Example: `/register 12345678 John Doe`
-  - Example: `/register 12345678`
-  - Can be updated anytime by running the command again
-  - This links your Discord account to your student ID for gradebook integration
+#### `/register [student_id] [student_name]` - Register your student information (Any Channel)
+- `student_id`: Your student ID number (required)
+- `student_name`: Your full name (optional)
+- **Examples:**
+  - `/register 12345678 John Doe`
+  - `/register 12345678`
+- Can be updated anytime by running the command again
+- Links your Discord account to your student ID for gradebook integration
 
-- `/here [code]` - Submit attendance with the current code **(Attendance Channel Only)**
-  - Example: `/here A1B2`
-  - Must match the current code displayed
-  - Only your last submission counts
+#### `/here [code]` - Submit attendance (Attendance Channel Only)
+- `code`: The current attendance code displayed on screen
+- **Example:** `/here A1B2`
+- Must match the current code
+- Only your last submission counts
+
+### Admin Commands (Admin Channel Only)
+
+#### `/open_attendance` - Start a new attendance session
+- Posts code message in admin channel (display on projector)
+- Posts notification in attendance channel
+- Starts automatic code rotation
+
+#### `/close_attendance` - End the current attendance session
+- Saves all records to database
+- Shows total submission count
+- Updates both channel messages to show session closed
+
+#### `/export_csv [session_id]` - Export attendance records to CSV
+- Without `session_id`: exports all records
+- With `session_id`: exports only that session's records
+- **Examples:**
+  - `/export_csv` (all records)
+  - `/export_csv 1733068800` (specific session)
+
+#### `/excuse [student] [date]` - Mark a student as excused
+- `student`: Student ID, Discord username, or Discord user ID (autocomplete available)
+- `date`: Date in YYYY-MM-DD format (defaults to today)
+- **Examples:**
+  - `/excuse 12345678` (today)
+  - `/excuse 12345678 2025-12-15` (specific date)
+  - `/excuse @JohnDoe 2025-12-15` (using Discord mention)
+- Creates or updates attendance record with "excused" status
+
+#### `/mark_present [student] [date] [session_id]` - Manually mark a student as present
+- `student`: Student ID, Discord username, or Discord user ID (autocomplete available)
+- `date`: Date in YYYY-MM-DD format (defaults to today)
+- `session_id`: Optional specific session ID
+- **Examples:**
+  - `/mark_present 12345678` (today)
+  - `/mark_present 12345678 2025-12-15` (specific date)
+  - `/mark_present 12345678 2025-12-15 1733068800` (specific session)
+- Creates new attendance record or updates existing record to "present"
+
+#### `/remove_attendance [student] [date] [session_id]` - Remove a student's attendance record
+- `student`: Student ID, Discord username, or Discord user ID (autocomplete available)
+- `date`: Date in YYYY-MM-DD format (optional if session_id provided)
+- `session_id`: Optional specific session ID (optional if date provided)
+- **Examples:**
+  - `/remove_attendance 12345678 2025-12-15` (all records for that date)
+  - `/remove_attendance 12345678 2025-12-15 1733068800` (specific session)
+- Must specify at least one of date or session_id
+- Removes the attendance record from database
 
 ## Configuration Options
 
@@ -264,106 +274,35 @@ Edit `.env` to customize:
 | `CODE_ROTATION_INTERVAL` | Seconds between code changes | `15` |
 | `CODE_LENGTH` | Number of characters in codes | `4` |
 
-## Database Schema
-
-The SQLite database has two main tables:
-
-### Attendance Table
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | INTEGER | Auto-incrementing primary key |
-| `user_id` | INTEGER | Discord user ID |
-| `username` | TEXT | Discord username |
-| `timestamp` | TEXT | Submission timestamp |
-| `date_id` | TEXT | Date of submission (YYYY-MM-DD) |
-| `session_id` | TEXT | Unique session identifier |
-
-**Unique constraint**: `(user_id, session_id)` ensures one record per student per session.
-
-### Students Table (Registration)
-| Column | Type | Description |
-|--------|------|-------------|
-| `user_id` | INTEGER | Discord user ID (primary key) |
-| `student_id` | TEXT | Student ID number |
-| `student_name` | TEXT | Student's real name (optional) |
-| `registered_at` | TEXT | Registration timestamp |
-
-## CSV Export Format
-
-Exported CSV files contain attendance records **with student information** (joined from both tables):
-
-```csv
-student_id,student_name,discord_username,user_id,timestamp,date_id,session_id
-12345678,John Doe,john_doe,123456789,2025-12-01 14:35:22,2025-12-01,1733068800
-87654321,Jane Smith,jane_s,987654321,2025-12-01 14:36:10,2025-12-01,1733068800
-```
-
-**Note**: If a student hasn't registered with `/register`, their `student_id` and `student_name` columns will be empty in the CSV export.
-
-## Project Structure
-
-```
-discord-attendance/
-├── bot/
-│   ├── client.py           # Bot initialization
-│   └── cogs/
-│       └── attendance.py   # Attendance commands
-├── storage/
-│   ├── database.py         # SQLite database handler
-│   └── session_manager.py  # Session state management
-├── utils/
-│   ├── code_generator.py   # Random code generation
-│   └── errors.py           # Custom exceptions
-├── data/
-│   └── attendance.db       # SQLite database (created automatically)
-├── config.py               # Configuration management
-├── main.py                 # Entry point
-├── requirements.txt        # Python dependencies
-├── .env.example            # Configuration template
-├── Dockerfile              # Docker container definition
-├── docker-compose.yml      # Docker Compose configuration
-├── .dockerignore           # Files excluded from Docker build
-└── README.md              # This file
-```
-
-## How Concurrent Access Works
-
-The bot handles multiple students submitting at the same time using:
-
-1. **SQLite Write-Ahead Logging (WAL) mode**: Allows concurrent reads during writes
-2. **asyncio.Lock()**: Prevents race conditions in the session manager
-3. **UNIQUE constraint**: Database ensures one record per student per session
-4. **INSERT OR REPLACE**: Atomic upsert operations for duplicate submissions
-5. **aiosqlite**: Async-compatible database operations
-
-This architecture safely handles 50-200 concurrent students without data loss or corruption.
-
 ## Troubleshooting
 
 ### Bot doesn't start
 
-- **Check your token**: Make sure `DISCORD_BOT_TOKEN` is correct
+- **Check your token**: Make sure `DISCORD_BOT_TOKEN` is correct in `.env`
 - **Check .env file**: Ensure all required variables are set
-- **Check Python version**: Must be 3.9 or higher
+- **Check Python version**: Must be 3.9 or higher (`python --version`)
+- **Check Docker**: If using Docker, ensure Docker is running
 
 ### Slash commands don't appear
 
 - Wait 1-2 minutes after starting the bot (Discord syncs commands)
 - Try leaving and rejoining the server
 - Check bot permissions (it needs `applications.commands` scope)
+- Restart Discord client
 
 ### Commands don't work in channels
 
 - Verify channel IDs are correct (use Developer Mode to copy)
 - Check that IDs are just numbers (no `<#...>` formatting)
 - Ensure bot has permissions in both channels
+- Try `/here test` in attendance channel to see if bot responds
 
 ### "403 Forbidden (error code: 50001): Missing Access"
 
 This error means the bot doesn't have permission to send messages in the channel.
 
-**Fix:**
-1. Right-click the attendance channel → "Edit Channel"
+**Fix Option 1 (Channel-specific):**
+1. Right-click the channel → "Edit Channel"
 2. Go to "Permissions" tab
 3. Click "+" to add a role/member
 4. Select your bot's role
@@ -373,9 +312,9 @@ This error means the bot doesn't have permission to send messages in the channel
    - ✅ Embed Links
    - ✅ Read Message History
 6. Click "Save Changes"
-7. Repeat for the admin channel if needed
+7. Repeat for admin channel if needed
 
-**Alternative fix (server-wide):**
+**Fix Option 2 (Server-wide):**
 1. Server Settings → Roles
 2. Find your bot's role
 3. Enable "Send Messages" and "View Channels" permissions
@@ -384,68 +323,97 @@ This error means the bot doesn't have permission to send messages in the channel
 ### "No active attendance session" error
 
 - An admin must run `/open_attendance` first
-- If bot restarted during a session, run `/open_attendance` again
+- If bot restarted during a session, session state is lost - run `/open_attendance` again
+- Check that you're using `/here` in the correct attendance channel
 
 ### Database errors
 
-- Check that `data/` directory exists
-- Ensure bot has write permissions
-- Check disk space
+- Check that `data/` directory exists and is writable
+- Ensure bot has write permissions to the directory
+- Check available disk space
+- For Docker: ensure volume mount is correct in `docker-compose.yml`
 
 ### Code rotation stops
 
-- Check console for error messages
-- Verify the attendance message wasn't deleted
+- Check console/logs for error messages
+- Verify the admin message wasn't deleted (bot needs it to update)
 - Restart the bot if needed
+- Check `CODE_ROTATION_INTERVAL` is not set too low (minimum 5 seconds recommended)
+
+### Student autocomplete not working in admin commands
+
+- Make sure students have registered with `/register` first
+- Autocomplete searches student IDs, names, and Discord usernames
+- Must be in admin channel for autocomplete to work
+- Try typing at least 2-3 characters before expecting results
+
+### CSV export is empty or missing students
+
+- Ensure session has been closed with `/close_attendance`
+- Check that students registered with `/register` (unregistered students will have empty student_id/student_name columns)
+- Verify session_id is correct if exporting specific session
+- Try exporting all records without session_id parameter
+
+### Docker container keeps restarting
+
+- Check logs: `docker compose logs -f`
+- Verify `.env` file exists and has correct values
+- Ensure bot token is valid
+- Check that channel IDs are valid integers
+- Try running without `-d` flag to see errors: `docker compose up`
 
 ## Security Considerations
 
-- **Never commit `.env`**: Contains your bot token
-- **Restrict admin channel**: Only admins should access it
+- **Never commit `.env`**: Contains your bot token (add to `.gitignore`)
+- **Restrict admin channel**: Only admins should have access
 - **Database backups**: Regularly backup `data/attendance.db`
-- **Code security**: Uses cryptographically secure random generation
-- **File permissions**: Keep database file owner-readable only (chmod 600)
-
-## Development
-
-### Running tests
-
-```bash
-pytest
-```
-
-### Code structure
-
-- `config.py`: Configuration validation
-- `utils/code_generator.py`: Code generation with collision avoidance
-- `utils/errors.py`: Custom exception classes
-- `storage/session_manager.py`: In-memory session state (singleton pattern)
-- `storage/database.py`: SQLite operations with concurrent access
-- `bot/client.py`: Bot initialization and event handlers
-- `bot/cogs/attendance.py`: Slash command implementations
+- **File permissions**: Keep `.env` and database file owner-readable only (chmod 600)
 
 ## FAQ
 
 **Q: What happens if a student submits multiple times?**
+
 A: Only their last submission is recorded (allows corrections).
 
 **Q: Can students see who else submitted?**
+
 A: No, all responses are ephemeral (private).
 
 **Q: What if the bot crashes during attendance?**
-A: Active session state is lost, but historical data remains. Restart and run `/open_attendance` again.
+
+A: Active session state is lost, but historical data in database remains. Restart and run `/open_attendance` again.
 
 **Q: How long are codes valid?**
-A: Each code is valid for exactly 15 seconds (configurable).
+
+A: Each code is valid for exactly 15 seconds (configurable in `.env`).
 
 **Q: Can I run multiple sessions per day?**
+
 A: Yes, each session gets a unique session ID (Unix timestamp).
 
 **Q: How do I backup attendance data?**
-A: Copy the `data/attendance.db` file or use `/export_csv` to create backups.
+
+A: Copy the `data/attendance.db` file or use `/export_csv` to create CSV backups.
 
 **Q: Can I change the code rotation speed?**
+
 A: Yes, edit `CODE_ROTATION_INTERVAL` in `.env` (minimum 5 seconds recommended).
+
+**Q: Can students who forgot to submit be marked present later?**
+
+A: Yes, admins can use `/mark_present` to manually add attendance records.
+
+**Q: What's the difference between "excused" and removing attendance?**
+
+A: "Excused" marks the student as absent but excused (shows in CSV as "excused" status). Removing attendance completely deletes the record from the database.
+
+**Q: How do I find a session ID?**
+
+A: Session IDs are shown when closing attendance. They're also Unix timestamps (e.g., 1733068800). Use `/export_csv` without parameters to see all sessions in the CSV.
+
+## Technical Documentation
+
+For technical details about the architecture, database schema, and development, see [TECHNICAL.md](TECHNICAL.md).
 
 ## License
 
@@ -455,9 +423,10 @@ MIT License - feel free to modify and distribute.
 
 For issues or questions:
 1. Check the troubleshooting section above
-2. Review console output for error messages
+2. Review console output or logs for error messages
 3. Verify your configuration in `.env`
 4. Check Discord bot permissions
+5. Consult [TECHNICAL.md](TECHNICAL.md) for architecture details
 
 ## Credits
 
