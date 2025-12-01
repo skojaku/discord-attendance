@@ -1,0 +1,50 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info
+.eggs
+*.egg
+.mypy_cache
+.pytest_cache
+.ruff_cache
+
+# Virtual environments
+venv
+.venv
+env
+.env.local
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Documentation
+*.md
+!README.md
+
+# Development files
+.python-version
+pyproject.toml
+uv.lock
+
+# Data files (mounted as volume instead)
+data/*.db
+data/*.csv
+
+# Environment files (loaded separately)
+.env
+.env.example
+
+# Docker files (not needed inside container)
+Dockerfile
+docker-compose.yml
+.dockerignore
