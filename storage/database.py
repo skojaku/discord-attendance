@@ -44,6 +44,16 @@ class AttendanceDatabase:
                 )
             """)
 
+            # Create student registration table
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS students (
+                    user_id INTEGER PRIMARY KEY,
+                    student_id TEXT NOT NULL,
+                    student_name TEXT,
+                    registered_at TEXT NOT NULL
+                )
+            """)
+
             # Create indexes for faster queries
             await db.execute("""
                 CREATE INDEX IF NOT EXISTS idx_session
@@ -53,6 +63,11 @@ class AttendanceDatabase:
             await db.execute("""
                 CREATE INDEX IF NOT EXISTS idx_date
                 ON attendance(date_id)
+            """)
+
+            await db.execute("""
+                CREATE INDEX IF NOT EXISTS idx_student_id
+                ON students(student_id)
             """)
 
             await db.commit()
@@ -129,13 +144,62 @@ class AttendanceDatabase:
                 rows = await cursor.fetchall()
                 return [dict(row) for row in rows]
 
+    async def register_student(
+        self,
+        user_id: int,
+        student_id: str,
+        student_name: Optional[str] = None
+    ) -> bool:
+        """
+        Register a student with their student ID and optional name.
+
+        Args:
+            user_id: Discord user ID
+            student_id: Student ID (from school/university)
+            student_name: Optional student real name
+
+        Returns:
+            True if registered successfully
+        """
+        async with aiosqlite.connect(self.db_path, timeout=5.0) as db:
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+            await db.execute("""
+                INSERT OR REPLACE INTO students
+                (user_id, student_id, student_name, registered_at)
+                VALUES (?, ?, ?, ?)
+            """, (user_id, student_id, student_name, timestamp))
+
+            await db.commit()
+            return True
+
+    async def get_student_info(self, user_id: int) -> Optional[Dict]:
+        """
+        Get student registration information.
+
+        Args:
+            user_id: Discord user ID
+
+        Returns:
+            Dict with student info or None if not registered
+        """
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute("""
+                SELECT user_id, student_id, student_name, registered_at
+                FROM students
+                WHERE user_id = ?
+            """, (user_id,)) as cursor:
+                row = await cursor.fetchone()
+                return dict(row) if row else None
+
     async def export_to_csv(
         self,
         output_path: str,
         session_id: Optional[str] = None
     ) -> int:
         """
-        Export attendance records to a CSV file.
+        Export attendance records to a CSV file with student information.
 
         Args:
             output_path: Path for the CSV file
@@ -147,19 +211,36 @@ class AttendanceDatabase:
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
 
+            # Join attendance with student registration data
             if session_id:
                 query = """
-                    SELECT user_id, username, timestamp, date_id, session_id
-                    FROM attendance
-                    WHERE session_id = ?
-                    ORDER BY timestamp ASC
+                    SELECT
+                        a.user_id,
+                        a.username as discord_username,
+                        s.student_id,
+                        s.student_name,
+                        a.timestamp,
+                        a.date_id,
+                        a.session_id
+                    FROM attendance a
+                    LEFT JOIN students s ON a.user_id = s.user_id
+                    WHERE a.session_id = ?
+                    ORDER BY a.timestamp ASC
                 """
                 params = (session_id,)
             else:
                 query = """
-                    SELECT user_id, username, timestamp, date_id, session_id
-                    FROM attendance
-                    ORDER BY date_id DESC, timestamp DESC
+                    SELECT
+                        a.user_id,
+                        a.username as discord_username,
+                        s.student_id,
+                        s.student_name,
+                        a.timestamp,
+                        a.date_id,
+                        a.session_id
+                    FROM attendance a
+                    LEFT JOIN students s ON a.user_id = s.user_id
+                    ORDER BY a.date_id DESC, a.timestamp DESC
                 """
                 params = ()
 
@@ -169,7 +250,15 @@ class AttendanceDatabase:
                 # Write to CSV
                 with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
                     if rows:
-                        fieldnames = ['user_id', 'username', 'timestamp', 'date_id', 'session_id']
+                        fieldnames = [
+                            'student_id',
+                            'student_name',
+                            'discord_username',
+                            'user_id',
+                            'timestamp',
+                            'date_id',
+                            'session_id'
+                        ]
                         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                         writer.writeheader()
 
