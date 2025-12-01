@@ -391,6 +391,318 @@ class AttendanceCog(commands.Cog):
             import traceback
             traceback.print_exc()
 
+    async def _resolve_student(self, identifier: str) -> tuple:
+        """
+        Resolve a student identifier to user_id and display name.
+
+        Args:
+            identifier: Student ID, Discord username, or Discord user_id
+
+        Returns:
+            Tuple of (user_id, display_name, student_info) or (None, None, None) if not found
+        """
+        student_info = await self.database.find_student(identifier)
+        if not student_info:
+            return None, None, None
+
+        user_id = student_info['user_id']
+        display_name = (
+            student_info.get('student_name') or
+            student_info.get('username') or
+            student_info.get('student_id') or
+            str(user_id)
+        )
+        return user_id, display_name, student_info
+
+    @app_commands.command(name="excuse", description="Mark a student as excused for a date (admin only)")
+    @app_commands.describe(
+        student="Student ID, Discord username, or Discord user ID",
+        date="Date in YYYY-MM-DD format (defaults to today)"
+    )
+    async def excuse(
+        self,
+        interaction: discord.Interaction,
+        student: str,
+        date: str = None
+    ):
+        """Mark a student as excused for a specific date."""
+        # Validate channel
+        if not self._is_admin_channel(interaction):
+            await interaction.response.send_message(
+                "❌ This command can only be used in the admin channel.",
+                ephemeral=True
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            # Resolve student
+            user_id, display_name, student_info = await self._resolve_student(student)
+            if not user_id:
+                await interaction.followup.send(
+                    f"❌ Student not found: `{student}`\n"
+                    f"Try using their student ID, Discord username, or Discord user ID.",
+                    ephemeral=True
+                )
+                return
+
+            # Default to today's date
+            if not date:
+                date = datetime.now().strftime('%Y-%m-%d')
+
+            # Validate date format
+            try:
+                datetime.strptime(date, '%Y-%m-%d')
+            except ValueError:
+                await interaction.followup.send(
+                    f"❌ Invalid date format: `{date}`\n"
+                    f"Please use YYYY-MM-DD format (e.g., 2025-12-01).",
+                    ephemeral=True
+                )
+                return
+
+            # Check if student has an attendance record for this date
+            existing = await self.database.get_attendance_record(user_id, date_id=date)
+
+            if existing:
+                # Update existing record to excused
+                count = await self.database.update_attendance_status(user_id, 'excused', date_id=date)
+                if count > 0:
+                    await interaction.followup.send(
+                        f"✅ Marked **{display_name}** as excused for `{date}`\n"
+                        f"(Updated existing attendance record)",
+                        ephemeral=True
+                    )
+                else:
+                    await interaction.followup.send(
+                        f"❌ Failed to update attendance record for **{display_name}**.",
+                        ephemeral=True
+                    )
+            else:
+                # Create new excused record
+                username = student_info.get('username') or student_info.get('student_name') or student
+                result = await self.database.add_manual_attendance(
+                    user_id=user_id,
+                    username=username,
+                    date_id=date,
+                    status='excused'
+                )
+                await interaction.followup.send(
+                    f"✅ Marked **{display_name}** as excused for `{date}`\n"
+                    f"Session ID: `{result['session_id']}`",
+                    ephemeral=True
+                )
+
+        except Exception as e:
+            await interaction.followup.send(
+                f"❌ Error marking student as excused: {str(e)}",
+                ephemeral=True
+            )
+            print(f"Error in excuse command: {e}")
+            import traceback
+            traceback.print_exc()
+
+    @app_commands.command(name="mark_present", description="Manually mark a student as present (admin only)")
+    @app_commands.describe(
+        student="Student ID, Discord username, or Discord user ID",
+        date="Date in YYYY-MM-DD format (defaults to today)",
+        session_id="Optional: specific session ID"
+    )
+    async def mark_present(
+        self,
+        interaction: discord.Interaction,
+        student: str,
+        date: str = None,
+        session_id: str = None
+    ):
+        """Manually mark a student as present for a specific date."""
+        # Validate channel
+        if not self._is_admin_channel(interaction):
+            await interaction.response.send_message(
+                "❌ This command can only be used in the admin channel.",
+                ephemeral=True
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            # Resolve student
+            user_id, display_name, student_info = await self._resolve_student(student)
+            if not user_id:
+                await interaction.followup.send(
+                    f"❌ Student not found: `{student}`\n"
+                    f"Try using their student ID, Discord username, or Discord user ID.",
+                    ephemeral=True
+                )
+                return
+
+            # Default to today's date
+            if not date:
+                date = datetime.now().strftime('%Y-%m-%d')
+
+            # Validate date format
+            try:
+                datetime.strptime(date, '%Y-%m-%d')
+            except ValueError:
+                await interaction.followup.send(
+                    f"❌ Invalid date format: `{date}`\n"
+                    f"Please use YYYY-MM-DD format (e.g., 2025-12-01).",
+                    ephemeral=True
+                )
+                return
+
+            # Check if student already has an attendance record
+            existing = await self.database.get_attendance_record(
+                user_id,
+                date_id=date if not session_id else None,
+                session_id=session_id
+            )
+
+            if existing:
+                # Update existing record to present
+                count = await self.database.update_attendance_status(
+                    user_id, 'present',
+                    date_id=date if not session_id else None,
+                    session_id=session_id
+                )
+                if count > 0:
+                    await interaction.followup.send(
+                        f"✅ Marked **{display_name}** as present for `{date}`\n"
+                        f"(Updated existing record - was previously `{existing.get('status', 'unknown')}`)",
+                        ephemeral=True
+                    )
+                else:
+                    await interaction.followup.send(
+                        f"❌ Failed to update attendance record for **{display_name}**.",
+                        ephemeral=True
+                    )
+            else:
+                # Create new attendance record
+                username = student_info.get('username') or student_info.get('student_name') or student
+                result = await self.database.add_manual_attendance(
+                    user_id=user_id,
+                    username=username,
+                    date_id=date,
+                    session_id=session_id,
+                    status='present'
+                )
+                await interaction.followup.send(
+                    f"✅ Marked **{display_name}** as present for `{date}`\n"
+                    f"Session ID: `{result['session_id']}`",
+                    ephemeral=True
+                )
+
+        except Exception as e:
+            await interaction.followup.send(
+                f"❌ Error marking student as present: {str(e)}",
+                ephemeral=True
+            )
+            print(f"Error in mark_present command: {e}")
+            import traceback
+            traceback.print_exc()
+
+    @app_commands.command(name="remove_attendance", description="Remove a student's attendance record (admin only)")
+    @app_commands.describe(
+        student="Student ID, Discord username, or Discord user ID",
+        date="Date in YYYY-MM-DD format",
+        session_id="Optional: specific session ID (if not provided, removes all records for the date)"
+    )
+    async def remove_attendance(
+        self,
+        interaction: discord.Interaction,
+        student: str,
+        date: str = None,
+        session_id: str = None
+    ):
+        """Remove a student's attendance record."""
+        # Validate channel
+        if not self._is_admin_channel(interaction):
+            await interaction.response.send_message(
+                "❌ This command can only be used in the admin channel.",
+                ephemeral=True
+            )
+            return
+
+        # Require at least one filter (date or session_id)
+        if not date and not session_id:
+            await interaction.response.send_message(
+                "❌ Please specify either a date or session_id to remove attendance records.",
+                ephemeral=True
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            # Resolve student
+            user_id, display_name, student_info = await self._resolve_student(student)
+            if not user_id:
+                await interaction.followup.send(
+                    f"❌ Student not found: `{student}`\n"
+                    f"Try using their student ID, Discord username, or Discord user ID.",
+                    ephemeral=True
+                )
+                return
+
+            # Validate date format if provided
+            if date:
+                try:
+                    datetime.strptime(date, '%Y-%m-%d')
+                except ValueError:
+                    await interaction.followup.send(
+                        f"❌ Invalid date format: `{date}`\n"
+                        f"Please use YYYY-MM-DD format (e.g., 2025-12-01).",
+                        ephemeral=True
+                    )
+                    return
+
+            # Check if record exists before removing
+            existing = await self.database.get_attendance_record(
+                user_id,
+                date_id=date if not session_id else None,
+                session_id=session_id
+            )
+
+            if not existing:
+                await interaction.followup.send(
+                    f"❌ No attendance record found for **{display_name}**"
+                    + (f" on `{date}`" if date else "")
+                    + (f" (session: `{session_id}`)" if session_id else ""),
+                    ephemeral=True
+                )
+                return
+
+            # Remove the record
+            count = await self.database.remove_attendance(
+                user_id,
+                date_id=date if not session_id else None,
+                session_id=session_id
+            )
+
+            if count > 0:
+                await interaction.followup.send(
+                    f"✅ Removed {count} attendance record(s) for **{display_name}**"
+                    + (f" on `{date}`" if date else "")
+                    + (f" (session: `{session_id}`)" if session_id else ""),
+                    ephemeral=True
+                )
+            else:
+                await interaction.followup.send(
+                    f"❌ Failed to remove attendance record for **{display_name}**.",
+                    ephemeral=True
+                )
+
+        except Exception as e:
+            await interaction.followup.send(
+                f"❌ Error removing attendance: {str(e)}",
+                ephemeral=True
+            )
+            print(f"Error in remove_attendance command: {e}")
+            import traceback
+            traceback.print_exc()
+
     async def _rotate_code_loop(self):
         """Background task to rotate attendance codes every N seconds."""
         try:
