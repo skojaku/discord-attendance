@@ -414,11 +414,51 @@ class AttendanceCog(commands.Cog):
         )
         return user_id, display_name, student_info
 
+    async def student_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str
+    ) -> list[app_commands.Choice[str]]:
+        """Autocomplete for student parameter in admin commands."""
+        # Only provide suggestions in admin channel
+        if not self._is_admin_channel(interaction):
+            return []
+
+        try:
+            students = await self.database.search_students(current, limit=25)
+            choices = []
+            for s in students:
+                # Build display name: "Name (student_id) - @username" or "@username"
+                parts = []
+                if s.get('student_name'):
+                    parts.append(s['student_name'])
+                if s.get('student_id'):
+                    parts.append(f"({s['student_id']})")
+                if s.get('username'):
+                    parts.append(f"@{s['username']}")
+
+                display = " ".join(parts) if parts else str(s['user_id'])
+
+                # Use student_id as value if available, otherwise username
+                value = s.get('student_id') or s.get('username') or str(s['user_id'])
+
+                # Discord limits choice name to 100 chars
+                if len(display) > 100:
+                    display = display[:97] + "..."
+
+                choices.append(app_commands.Choice(name=display, value=value))
+
+            return choices
+        except Exception as e:
+            print(f"Error in student autocomplete: {e}")
+            return []
+
     @app_commands.command(name="excuse", description="Mark a student as excused for a date (admin only)")
     @app_commands.describe(
         student="Student ID, Discord username, or Discord user ID",
         date="Date in YYYY-MM-DD format (defaults to today)"
     )
+    @app_commands.autocomplete(student=student_autocomplete)
     async def excuse(
         self,
         interaction: discord.Interaction,
@@ -509,6 +549,7 @@ class AttendanceCog(commands.Cog):
         date="Date in YYYY-MM-DD format (defaults to today)",
         session_id="Optional: specific session ID"
     )
+    @app_commands.autocomplete(student=student_autocomplete)
     async def mark_present(
         self,
         interaction: discord.Interaction,
@@ -609,6 +650,7 @@ class AttendanceCog(commands.Cog):
         date="Date in YYYY-MM-DD format",
         session_id="Optional: specific session ID (if not provided, removes all records for the date)"
     )
+    @app_commands.autocomplete(student=student_autocomplete)
     async def remove_attendance(
         self,
         interaction: discord.Interaction,

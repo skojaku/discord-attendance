@@ -293,6 +293,41 @@ class AttendanceDatabase:
                 rows = await cursor.fetchall()
                 return [row[0] for row in rows]
 
+    async def search_students(self, query: str, limit: int = 25) -> List[Dict]:
+        """
+        Search for students by partial match on student_id, student_name, or username.
+
+        Args:
+            query: Partial search string
+            limit: Maximum number of results to return
+
+        Returns:
+            List of matching student dicts with user_id, student_id, student_name, username
+        """
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            query_lower = f"%{query.lower()}%"
+
+            # Search in both students table and attendance records
+            async with db.execute("""
+                SELECT DISTINCT
+                    COALESCE(s.user_id, a.user_id) as user_id,
+                    s.student_id,
+                    s.student_name,
+                    a.username
+                FROM attendance a
+                LEFT JOIN students s ON a.user_id = s.user_id
+                WHERE LOWER(s.student_id) LIKE ?
+                   OR LOWER(s.student_name) LIKE ?
+                   OR LOWER(a.username) LIKE ?
+                ORDER BY
+                    CASE WHEN s.student_name IS NOT NULL THEN 0 ELSE 1 END,
+                    s.student_name, a.username
+                LIMIT ?
+            """, (query_lower, query_lower, query_lower, limit)) as cursor:
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
+
     async def find_student(self, identifier: str) -> Optional[Dict]:
         """
         Find a student by student_id, Discord username, or Discord user_id.
