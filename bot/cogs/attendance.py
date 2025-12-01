@@ -58,8 +58,17 @@ class AttendanceCog(commands.Cog):
             # Generate initial code
             initial_code = generate_code(config.CODE_LENGTH)
 
-            # Send initial message in attendance channel
+            # Get both channels
+            admin_channel = self.bot.get_channel(config.ADMIN_CHANNEL_ID)
             attendance_channel = self.bot.get_channel(config.ATTENDANCE_CHANNEL_ID)
+
+            if not admin_channel:
+                await interaction.response.send_message(
+                    "❌ Could not find admin channel. Please check configuration.",
+                    ephemeral=True
+                )
+                return
+
             if not attendance_channel:
                 await interaction.response.send_message(
                     "❌ Could not find attendance channel. Please check configuration.",
@@ -67,28 +76,46 @@ class AttendanceCog(commands.Cog):
                 )
                 return
 
-            # Post the attendance message
-            embed = discord.Embed(
+            # Post the code message in ADMIN channel (for projector display)
+            code_embed = discord.Embed(
+                title="📋 Attendance Code (Admin Only)",
+                description="Show this code on the projector for students:",
+                color=discord.Color.blue()
+            )
+            code_embed.add_field(
+                name="Current Code",
+                value=f"# **`{initial_code}`**",
+                inline=False
+            )
+            code_embed.add_field(
+                name="Status",
+                value="0 student(s) submitted",
+                inline=False
+            )
+            code_embed.set_footer(text="Code changes every 15 seconds • Only the latest submission counts")
+
+            admin_message = await admin_channel.send(embed=code_embed)
+
+            # Post a notification in ATTENDANCE channel (no code shown)
+            student_embed = discord.Embed(
                 title="📋 Attendance is Now Open!",
-                description=f"Use the code below to mark your attendance:",
+                description="Look at the projector for the attendance code.",
                 color=discord.Color.green()
             )
-            embed.add_field(
-                name="Current Code",
-                value=f"**`{initial_code}`**",
-                inline=False
-            )
-            embed.add_field(
+            student_embed.add_field(
                 name="How to Submit",
-                value=f"Type `/here {initial_code}` in this channel",
+                value="Type `/here <code>` in this channel with the code shown on screen",
                 inline=False
             )
-            embed.set_footer(text="Code changes every 15 seconds • Only the latest submission counts")
+            student_embed.set_footer(text="Code changes every 15 seconds • Only the latest submission counts")
 
-            message = await attendance_channel.send(embed=embed)
+            attendance_message = await attendance_channel.send(embed=student_embed)
 
-            # Start session
-            self.session_manager.start_session(initial_code, message.id, attendance_channel.id)
+            # Start session (store admin message ID for code updates)
+            self.session_manager.start_session(initial_code, admin_message.id, admin_channel.id)
+            # Also store attendance message ID for updating when closed
+            self.session_manager.attendance_message_id = attendance_message.id
+            self.session_manager.attendance_channel_id = attendance_channel.id
 
             # Start code rotation task
             self.rotation_task = asyncio.create_task(self._rotate_code_loop())
@@ -96,8 +123,9 @@ class AttendanceCog(commands.Cog):
             # Confirm to admin
             await interaction.response.send_message(
                 f"✅ Attendance session started!\n"
-                f"Initial code: `{initial_code}`\n"
-                f"Message posted in <#{config.ATTENDANCE_CHANNEL_ID}>",
+                f"Current code: `{initial_code}`\n"
+                f"Code displayed in this channel (show on projector)\n"
+                f"Students notified in <#{config.ATTENDANCE_CHANNEL_ID}>",
                 ephemeral=True
             )
 
@@ -141,27 +169,52 @@ class AttendanceCog(commands.Cog):
             # Save to database
             saved_count = await self.database.save_attendance_records(records, session_id)
 
-            # Update the attendance message to show it's closed
+            # Update the admin channel message to show it's closed
             try:
-                channel = self.bot.get_channel(self.session_manager.channel_id or config.ATTENDANCE_CHANNEL_ID)
-                if channel and self.session_manager.message_id:
-                    message = await channel.fetch_message(self.session_manager.message_id)
+                admin_channel = self.bot.get_channel(self.session_manager.channel_id or config.ADMIN_CHANNEL_ID)
+                if admin_channel and self.session_manager.message_id:
+                    admin_message = await admin_channel.fetch_message(self.session_manager.message_id)
 
-                    embed = discord.Embed(
-                        title="📋 Attendance is Now Closed",
+                    admin_embed = discord.Embed(
+                        title="📋 Attendance Session Closed",
                         description="This attendance session has ended.",
                         color=discord.Color.red()
                     )
-                    embed.add_field(
+                    admin_embed.add_field(
                         name="Total Submissions",
                         value=f"{saved_count} student(s)",
                         inline=False
                     )
-                    embed.set_footer(text=f"Session ID: {session_id}")
+                    admin_embed.set_footer(text=f"Session ID: {session_id}")
 
-                    await message.edit(embed=embed)
+                    await admin_message.edit(embed=admin_embed)
             except Exception as e:
-                print(f"Could not update attendance message: {e}")
+                print(f"Could not update admin message: {e}")
+
+            # Update the attendance channel message to show it's closed
+            try:
+                attendance_channel = self.bot.get_channel(
+                    getattr(self.session_manager, 'attendance_channel_id', None) or config.ATTENDANCE_CHANNEL_ID
+                )
+                attendance_msg_id = getattr(self.session_manager, 'attendance_message_id', None)
+                if attendance_channel and attendance_msg_id:
+                    attendance_message = await attendance_channel.fetch_message(attendance_msg_id)
+
+                    student_embed = discord.Embed(
+                        title="📋 Attendance is Now Closed",
+                        description="This attendance session has ended.",
+                        color=discord.Color.red()
+                    )
+                    student_embed.add_field(
+                        name="Total Submissions",
+                        value=f"{saved_count} student(s)",
+                        inline=False
+                    )
+                    student_embed.set_footer(text=f"Session ID: {session_id}")
+
+                    await attendance_message.edit(embed=student_embed)
+            except Exception as e:
+                print(f"Could not update attendance channel message: {e}")
 
             # Reset session manager
             self.session_manager.reset()
@@ -355,41 +408,36 @@ class AttendanceCog(commands.Cog):
                 # Update session manager
                 self.session_manager.update_code(new_code)
 
-                # Update Discord message
+                # Update the admin channel message with new code
                 try:
-                    channel = self.bot.get_channel(self.session_manager.channel_id)
-                    if channel and self.session_manager.message_id:
-                        message = await channel.fetch_message(self.session_manager.message_id)
+                    admin_channel = self.bot.get_channel(self.session_manager.channel_id)
+                    if admin_channel and self.session_manager.message_id:
+                        message = await admin_channel.fetch_message(self.session_manager.message_id)
 
-                        embed = discord.Embed(
-                            title="📋 Attendance is Now Open!",
-                            description=f"Use the code below to mark your attendance:",
-                            color=discord.Color.green()
+                        code_embed = discord.Embed(
+                            title="📋 Attendance Code (Admin Only)",
+                            description="Show this code on the projector for students:",
+                            color=discord.Color.blue()
                         )
-                        embed.add_field(
+                        code_embed.add_field(
                             name="Current Code",
-                            value=f"**`{new_code}`**",
+                            value=f"# **`{new_code}`**",
                             inline=False
                         )
-                        embed.add_field(
-                            name="How to Submit",
-                            value=f"Type `/here {new_code}` in this channel",
-                            inline=False
-                        )
-                        embed.add_field(
+                        code_embed.add_field(
                             name="Status",
                             value=f"{self.session_manager.get_submission_count()} student(s) submitted",
                             inline=False
                         )
-                        embed.set_footer(text="Code changes every 15 seconds • Only the latest submission counts")
+                        code_embed.set_footer(text="Code changes every 15 seconds • Only the latest submission counts")
 
-                        await message.edit(embed=embed)
+                        await message.edit(embed=code_embed)
 
                 except discord.NotFound:
-                    print("Attendance message not found, stopping rotation")
+                    print("Admin message not found, stopping rotation")
                     break
                 except Exception as e:
-                    print(f"Error updating attendance message: {e}")
+                    print(f"Error updating admin message: {e}")
                     # Continue rotation even if message update fails
 
         except asyncio.CancelledError:
