@@ -61,13 +61,26 @@ An automated attendance tracking system for Discord servers using rotating codes
    - Select bot permissions:
      - Send Messages
      - Embed Links
+     - Read Messages/View Channels
+     - Read Message History
      - Use Slash Commands
    - Copy the generated URL and open it in your browser to invite the bot to your server
 
+5. **Important:** Verify bot permissions in your Discord server:
+   - Go to your Discord server settings → Roles
+   - Find your bot's role (usually same name as the bot)
+   - Ensure it has "View Channels" and "Send Messages" permissions
+   - Or, for the attendance and admin channels specifically:
+     - Right-click the channel → Edit Channel → Permissions
+     - Add your bot's role with "View Channel" and "Send Messages" permissions
+
 ### Step 2: Get Channel IDs
 
-1. Enable Developer Mode in Discord:
-   - User Settings → App Settings → Advanced → Developer Mode (toggle on)
+1. Enable Developer Mode in Discord (Desktop/Web):
+   - Click the User Settings (Gear Icon ⚙️) at the bottom-left near your username.
+   - In the left sidebar, scroll down past "Billing Settings" until you see the section header "APP SETTINGS".
+   - Under "APP SETTINGS", click on "Advanced".
+   - Toggle "Developer Mode" to On.
 
 2. Right-click on your admin channel → "Copy Channel ID"
 3. Right-click on your attendance channel → "Copy Channel ID"
@@ -81,9 +94,22 @@ An automated attendance tracking system for Discord servers using rotating codes
    ```
 
 2. Install dependencies:
+
+   **Option A: Using pip (traditional)**
    ```bash
    pip install -r requirements.txt
    ```
+
+   **Option B: Using uv (faster, recommended)**
+   ```bash
+   # Install uv if you haven't already
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+
+   # Install dependencies with uv
+   uv pip install -r requirements.txt
+   ```
+
+   > **Note:** [uv](https://github.com/astral-sh/uv) is a fast Python package installer that's 10-100x faster than pip. It's fully compatible with pip and can be used as a drop-in replacement.
 
 3. Create your configuration file:
    ```bash
@@ -227,6 +253,29 @@ This architecture safely handles 50-200 concurrent students without data loss or
 - Verify channel IDs are correct (use Developer Mode to copy)
 - Check that IDs are just numbers (no `<#...>` formatting)
 - Ensure bot has permissions in both channels
+
+### "403 Forbidden (error code: 50001): Missing Access"
+
+This error means the bot doesn't have permission to send messages in the channel.
+
+**Fix:**
+1. Right-click the attendance channel → "Edit Channel"
+2. Go to "Permissions" tab
+3. Click "+" to add a role/member
+4. Select your bot's role
+5. Enable these permissions:
+   - ✅ View Channel
+   - ✅ Send Messages
+   - ✅ Embed Links
+   - ✅ Read Message History
+6. Click "Save Changes"
+7. Repeat for the admin channel if needed
+
+**Alternative fix (server-wide):**
+1. Server Settings → Roles
+2. Find your bot's role
+3. Enable "Send Messages" and "View Channels" permissions
+4. Save
 
 ### "No active attendance session" error
 
