@@ -26,8 +26,10 @@ class AttendanceSession:
 
         self.session_id: Optional[str] = None
         self.current_code: Optional[str] = None
-        self.message_id: Optional[int] = None
-        self.channel_id: Optional[int] = None
+        self.message_id: Optional[int] = None  # Admin channel message (shows code)
+        self.channel_id: Optional[int] = None  # Admin channel ID
+        self.attendance_message_id: Optional[int] = None  # Attendance channel message
+        self.attendance_channel_id: Optional[int] = None  # Attendance channel ID
         self.start_time: Optional[datetime] = None
         self.submissions: Dict[int, Dict] = {}
         self.is_active: bool = False
@@ -142,8 +144,7 @@ class AttendanceSession:
         # Reset session state
         self.is_active = False
         self.current_code = None
-        self.message_id = None
-        self.channel_id = None
+        # Keep message IDs until close_attendance updates both messages
         self.start_time = None
         # Keep submissions until they're saved, then clear
 
@@ -181,6 +182,8 @@ class AttendanceSession:
         self.current_code = None
         self.message_id = None
         self.channel_id = None
+        self.attendance_message_id = None
+        self.attendance_channel_id = None
         self.start_time = None
         self.submissions = {}
         self.is_active = False
