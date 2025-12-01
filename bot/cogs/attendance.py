@@ -235,6 +235,58 @@ class AttendanceCog(commands.Cog):
             )
             print(f"Error in here command: {e}")
 
+    @app_commands.command(name="register", description="Register your student ID and name")
+    @app_commands.describe(
+        student_id="Your student ID",
+        student_name="Your full name (optional)"
+    )
+    async def register(
+        self,
+        interaction: discord.Interaction,
+        student_id: str,
+        student_name: str = None
+    ):
+        """Register student ID and name for gradebook integration."""
+        try:
+            # Check if already registered
+            existing = await self.database.get_student_info(interaction.user.id)
+
+            # Register the student
+            await self.database.register_student(
+                interaction.user.id,
+                student_id,
+                student_name
+            )
+
+            if existing:
+                # Update message
+                await interaction.response.send_message(
+                    f"✅ Registration updated!\n"
+                    f"Student ID: `{student_id}`\n"
+                    f"Name: {student_name if student_name else '(not provided)'}\n"
+                    f"Discord: {interaction.user.mention}",
+                    ephemeral=True
+                )
+            else:
+                # New registration message
+                await interaction.response.send_message(
+                    f"✅ Registration successful!\n"
+                    f"Student ID: `{student_id}`\n"
+                    f"Name: {student_name if student_name else '(not provided)'}\n"
+                    f"Discord: {interaction.user.mention}\n\n"
+                    f"Your attendance records will now include your student information.",
+                    ephemeral=True
+                )
+
+        except Exception as e:
+            await interaction.response.send_message(
+                f"❌ Error registering: {str(e)}",
+                ephemeral=True
+            )
+            print(f"Error in register command: {e}")
+            import traceback
+            traceback.print_exc()
+
     @app_commands.command(name="export_csv", description="Export attendance records to CSV (admin only)")
     @app_commands.describe(session_id="Optional: Session ID to export (leave empty for all records)")
     async def export_csv(self, interaction: discord.Interaction, session_id: str = None):

@@ -155,9 +155,17 @@ Bot is ready!
   - Without `session_id`: exports all records
   - With `session_id`: exports only that session's records
 
-### Student Commands (Attendance Channel Only)
+### Student Commands
 
-- `/here [code]` - Submit attendance with the current code
+- `/register [student_id] [student_name]` - Register your student information **(Any Channel)**
+  - `student_id`: Your student ID number (required)
+  - `student_name`: Your full name (optional)
+  - Example: `/register 12345678 John Doe`
+  - Example: `/register 12345678`
+  - Can be updated anytime by running the command again
+  - This links your Discord account to your student ID for gradebook integration
+
+- `/here [code]` - Submit attendance with the current code **(Attendance Channel Only)**
   - Example: `/here A1B2`
   - Must match the current code displayed
   - Only your last submission counts
@@ -177,8 +185,9 @@ Edit `.env` to customize:
 
 ## Database Schema
 
-The SQLite database stores records in the `attendance` table:
+The SQLite database has two main tables:
 
+### Attendance Table
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | INTEGER | Auto-incrementing primary key |
@@ -190,14 +199,25 @@ The SQLite database stores records in the `attendance` table:
 
 **Unique constraint**: `(user_id, session_id)` ensures one record per student per session.
 
+### Students Table (Registration)
+| Column | Type | Description |
+|--------|------|-------------|
+| `user_id` | INTEGER | Discord user ID (primary key) |
+| `student_id` | TEXT | Student ID number |
+| `student_name` | TEXT | Student's real name (optional) |
+| `registered_at` | TEXT | Registration timestamp |
+
 ## CSV Export Format
 
-Exported CSV files contain the following columns:
+Exported CSV files contain attendance records **with student information** (joined from both tables):
 
 ```csv
-user_id,username,timestamp,date_id,session_id
-123456789,john_doe,2025-12-01 14:35:22,2025-12-01,1733068800
+student_id,student_name,discord_username,user_id,timestamp,date_id,session_id
+12345678,John Doe,john_doe,123456789,2025-12-01 14:35:22,2025-12-01,1733068800
+87654321,Jane Smith,jane_s,987654321,2025-12-01 14:36:10,2025-12-01,1733068800
 ```
+
+**Note**: If a student hasn't registered with `/register`, their `student_id` and `student_name` columns will be empty in the CSV export.
 
 ## Project Structure
 
