@@ -1,0 +1,33 @@
+# Docker Compose configuration for Discord Attendance Bot
+# Usage: docker compose up -d
+
+services:
+  discord-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: discord-attendance-bot
+    restart: unless-stopped
+
+    # Environment variables from .env file
+    env_file:
+      - .env
+
+    # Mount data directory for SQLite database persistence
+    volumes:
+      - ./data:/app/data
+
+    # Optional: Resource limits for production
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

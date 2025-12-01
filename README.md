@@ -139,6 +139,87 @@ Logged in as YourBot (ID: ...)
 Bot is ready!
 ```
 
+## Docker Deployment
+
+For easier deployment and management, you can run the bot using Docker.
+
+### Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) installed
+- [Docker Compose](https://docs.docker.com/compose/install/) (included with Docker Desktop)
+
+### Quick Start with Docker Compose
+
+1. Clone the repository:
+   ```bash
+   git clone <repository-url>
+   cd discord-attendance
+   ```
+
+2. Create your configuration file:
+   ```bash
+   cp .env.example .env
+   ```
+
+3. Edit `.env` with your Discord credentials (see Step 1 & 2 above for getting these):
+   ```env
+   DISCORD_BOT_TOKEN=your_bot_token_here
+   ADMIN_CHANNEL_ID=123456789012345678
+   ATTENDANCE_CHANNEL_ID=987654321098765432
+   ```
+
+4. Start the bot:
+   ```bash
+   docker compose up -d
+   ```
+
+5. View logs:
+   ```bash
+   docker compose logs -f
+   ```
+
+6. Stop the bot:
+   ```bash
+   docker compose down
+   ```
+
+### Building and Running Manually
+
+If you prefer not to use Docker Compose:
+
+```bash
+# Build the image
+docker build -t discord-attendance-bot .
+
+# Run the container
+docker run -d \
+  --name discord-attendance-bot \
+  --restart unless-stopped \
+  --env-file .env \
+  -v $(pwd)/data:/app/data \
+  discord-attendance-bot
+```
+
+### Docker Commands Reference
+
+| Command | Description |
+|---------|-------------|
+| `docker compose up -d` | Start the bot in background |
+| `docker compose down` | Stop the bot |
+| `docker compose logs -f` | View live logs |
+| `docker compose restart` | Restart the bot |
+| `docker compose build` | Rebuild the image (after code changes) |
+| `docker compose pull && docker compose up -d` | Update to latest version |
+
+### Data Persistence
+
+The SQLite database is stored in the `data/` directory, which is mounted as a Docker volume. Your attendance records persist even when the container is stopped or rebuilt.
+
+To backup your data:
+```bash
+cp data/attendance.db data/attendance.db.backup
+```
+
 ## Commands
 
 ### Admin Commands (Admin Channel Only)
@@ -239,6 +320,9 @@ discord-attendance/
 ├── main.py                 # Entry point
 ├── requirements.txt        # Python dependencies
 ├── .env.example            # Configuration template
+├── Dockerfile              # Docker container definition
+├── docker-compose.yml      # Docker Compose configuration
+├── .dockerignore           # Files excluded from Docker build
 └── README.md              # This file
 ```
 
